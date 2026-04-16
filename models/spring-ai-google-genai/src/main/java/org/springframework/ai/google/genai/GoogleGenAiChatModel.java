@@ -659,6 +659,10 @@ public class GoogleGenAiChatModel implements ChatModel, DisposableBean {
 		boolean isFunctionCall = candidate.content().isPresent() && candidate.content().get().parts().isPresent()
 				&& candidate.content().get().parts().get().stream().anyMatch(part -> part.functionCall().isPresent());
 
+		// Check for mixed modality: both text content AND function calls in the same response
+		boolean hasTextContent = candidate.content().isPresent() && candidate.content().get().parts().isPresent()
+				&& candidate.content().get().parts().get().stream().anyMatch(part -> part.text().isPresent() && !part.text().get().isEmpty());
+
 		if (isFunctionCall) {
 			List<AssistantMessage.ToolCall> assistantToolCalls = candidate.content()
 				.get()
@@ -674,8 +678,22 @@ public class GoogleGenAiChatModel implements ChatModel, DisposableBean {
 				})
 				.toList();
 
+			// Extract text content from parts (for mixed modality case)
+			String textContent = "";
+			if (hasTextContent) {
+				textContent = candidate.content()
+					.get()
+					.parts()
+					.orElse(List.of())
+					.stream()
+					.filter(part -> part.text().isPresent())
+					.map(part -> part.text().get())
+					.filter(t -> !t.isEmpty())
+					.collect(java.util.stream.Collectors.joining("\n"));
+			}
+
 			AssistantMessage assistantMessage = AssistantMessage.builder()
-				.content("")
+				.content(textContent)
 				.properties(messageMetadata)
 				.toolCalls(assistantToolCalls)
 				.build();
