@@ -98,8 +98,6 @@
 		<module>auto-configurations/models/embedding/observation/spring-ai-autoconfigure-model-embedding-observation</module>
 		<module>auto-configurations/models/image/observation/spring-ai-autoconfigure-model-image-observation</module>
 
-		<module>models/spring-ai-jina-reranker</module>
-
 		<module>auto-configurations/models/spring-ai-autoconfigure-model-anthropic</module>
 		<module>auto-configurations/models/spring-ai-autoconfigure-model-bedrock-ai</module>
 		<module>auto-configurations/models/spring-ai-autoconfigure-model-elevenlabs</module>
@@ -113,7 +111,7 @@
 		<module>auto-configurations/models/spring-ai-autoconfigure-model-vertex-ai</module>
 		<module>auto-configurations/models/spring-ai-autoconfigure-model-google-genai</module>
 		<module>auto-configurations/models/spring-ai-autoconfigure-model-deepseek</module>
-		<module>auto-configurations/models/spring-ai-autoconfigure-model-jina-reranker</module>
+
 
 		<module>auto-configurations/mcp/spring-ai-autoconfigure-mcp-client-common</module>
 		<module>auto-configurations/mcp/spring-ai-autoconfigure-mcp-client-httpclient</module>
