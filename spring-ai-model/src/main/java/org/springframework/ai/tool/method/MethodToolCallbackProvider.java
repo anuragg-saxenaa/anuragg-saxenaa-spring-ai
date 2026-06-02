@@ -27,8 +27,11 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import tools.jackson.databind.ObjectMapper;
 
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
@@ -56,11 +59,14 @@ public final class MethodToolCallbackProvider implements ToolCallbackProvider {
 
 	private final List<Object> toolObjects;
 
-	private MethodToolCallbackProvider(List<Object> toolObjects) {
+	private final ObjectMapper objectMapper;
+
+	private MethodToolCallbackProvider(List<Object> toolObjects, @Nullable ObjectMapper objectMapper) {
 		Assert.notNull(toolObjects, "toolObjects cannot be null");
 		Assert.noNullElements(toolObjects, "toolObjects cannot contain null elements");
 		assertToolAnnotatedMethodsPresent(toolObjects);
 		this.toolObjects = toolObjects;
+		this.objectMapper = objectMapper;
 		validateToolCallbacks(getToolCallbacks());
 	}
 
@@ -95,7 +101,7 @@ public final class MethodToolCallbackProvider implements ToolCallbackProvider {
 					.toolMetadata(ToolMetadata.from(toolMethod))
 					.toolMethod(toolMethod)
 					.toolObject(toolObject)
-					.toolCallResultConverter(ToolUtils.getToolCallResultConverter(toolMethod))
+					.toolCallResultConverter(ToolUtils.getToolCallResultConverter(toolMethod, this.objectMapper))
 					.build())
 				.toArray(ToolCallback[]::new))
 			.flatMap(Stream::of)
@@ -141,6 +147,8 @@ public final class MethodToolCallbackProvider implements ToolCallbackProvider {
 
 		private List<Object> toolObjects = new ArrayList<>();
 
+		private ObjectMapper objectMapper;
+
 		private Builder() {
 		}
 
@@ -150,8 +158,21 @@ public final class MethodToolCallbackProvider implements ToolCallbackProvider {
 			return this;
 		}
 
+		/**
+		 * Sets the Jackson {@link ObjectMapper} to use when building tool call result converters.
+		 * When set, the provided {@code objectMapper} is passed to
+		 * {@link DefaultToolCallResultConverter} so that Spring Boot Jackson configuration is
+		 * respected. When not set (null), the default no-arg constructor is used.
+		 * @param objectMapper the Jackson ObjectMapper, or null to use defaults
+		 * @return this builder
+		 */
+		public Builder objectMapper(@Nullable ObjectMapper objectMapper) {
+			this.objectMapper = objectMapper;
+			return this;
+		}
+
 		public MethodToolCallbackProvider build() {
-			return new MethodToolCallbackProvider(this.toolObjects);
+			return new MethodToolCallbackProvider(this.toolObjects, this.objectMapper);
 		}
 
 	}
