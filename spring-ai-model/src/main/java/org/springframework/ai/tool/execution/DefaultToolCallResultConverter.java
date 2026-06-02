@@ -29,6 +29,8 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import tools.jackson.databind.ObjectMapper;
+
 import org.springframework.ai.util.json.JsonParser;
 
 /**
@@ -41,11 +43,45 @@ public final class DefaultToolCallResultConverter implements ToolCallResultConve
 
 	private static final Logger logger = LoggerFactory.getLogger(DefaultToolCallResultConverter.class);
 
+	private final ObjectMapper objectMapper;
+
+	/**
+	 * Default constructor. Uses {@link JsonParser#getJsonMapper()} for JSON serialization,
+	 * which does not apply Spring Boot's {@code spring.jackson.default-property-inclusion}
+	 * settings.
+	 */
+	public DefaultToolCallResultConverter() {
+		this.objectMapper = JsonParser.getJsonMapper();
+	}
+
+	/**
+	 * Constructor that accepts a Jackson {@link ObjectMapper} (typically Spring-managed).
+	 * Allows the converter to respect Spring Boot Jackson configuration such as
+	 * {@code spring.jackson.default-property-inclusion}.
+	 * @param objectMapper the Jackson ObjectMapper (may be null, in which case the default
+	 * mapper is used)
+	 */
+	public DefaultToolCallResultConverter(@Nullable ObjectMapper objectMapper) {
+		this.objectMapper = objectMapper != null ? objectMapper : JsonParser.getJsonMapper();
+	}
+
+	private String toJson(@Nullable Object object) {
+		if (object == null) {
+			return "null";
+		}
+		try {
+			return this.objectMapper.writeValueAsString(object);
+		}
+		catch (IOException ex) {
+			throw new IllegalStateException("Conversion from Object to JSON failed", ex);
+		}
+	}
+
 	@Override
 	public String convert(@Nullable Object result, @Nullable Type returnType) {
 		if (returnType == Void.TYPE) {
 			logger.debug("The tool has no return type. Converting to conventional response.");
-			return JsonParser.toJson("Done");
+			return toJson("Done");
 		}
 		if (result instanceof RenderedImage) {
 			final var buf = new ByteArrayOutputStream(1024 * 4);
@@ -56,11 +92,11 @@ public final class DefaultToolCallResultConverter implements ToolCallResultConve
 				return "Failed to convert tool result to a base64 image: " + e.getMessage();
 			}
 			final var imgB64 = Base64.getEncoder().encodeToString(buf.toByteArray());
-			return JsonParser.toJson(Map.of("mimeType", "image/png", "data", imgB64));
+			return toJson(Map.of("mimeType", "image/png", "data", imgB64));
 		}
 		else {
 			logger.debug("Converting tool result to JSON.");
-			return JsonParser.toJson(result);
+			return toJson(result);
 		}
 	}
 

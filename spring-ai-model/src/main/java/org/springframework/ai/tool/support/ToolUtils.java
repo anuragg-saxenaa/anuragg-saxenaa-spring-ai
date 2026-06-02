@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +33,8 @@ import org.springframework.ai.tool.execution.DefaultToolCallResultConverter;
 import org.springframework.ai.tool.execution.ToolCallResultConverter;
 import org.springframework.ai.util.ParsingUtils;
 import org.springframework.core.annotation.AnnotatedElementUtils;
+import tools.jackson.databind.ObjectMapper;
+
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -89,12 +92,29 @@ public final class ToolUtils {
 	}
 
 	public static ToolCallResultConverter getToolCallResultConverter(Method method) {
+		return getToolCallResultConverter(method, null);
+	}
+
+	/**
+	 * Returns the {@link ToolCallResultConverter} for the given tool method. If the method's
+	 * {@link Tool#resultConverter()} attribute specifies {@link DefaultToolCallResultConverter}
+	 * and a non-null {@code objectMapper} is provided, the returned instance is backed by that
+	 * {@code objectMapper} so that Spring Boot Jackson configuration is respected.
+	 * @param method the tool method annotated with {@link Tool}
+	 * @param objectMapper the Jackson ObjectMapper to inject into
+	 *        {@link DefaultToolCallResultConverter}, or null to use the fallback default
+	 * @return the converter instance
+	 */
+	public static ToolCallResultConverter getToolCallResultConverter(Method method, @Nullable ObjectMapper objectMapper) {
 		Assert.notNull(method, "method cannot be null");
 		var tool = AnnotatedElementUtils.findMergedAnnotation(method, Tool.class);
 		if (tool == null) {
-			return new DefaultToolCallResultConverter();
+			return new DefaultToolCallResultConverter(objectMapper);
 		}
 		var type = tool.resultConverter();
+		if (DefaultToolCallResultConverter.class.isAssignableFrom(type)) {
+			return new DefaultToolCallResultConverter(objectMapper);
+		}
 		try {
 			return type.getDeclaredConstructor().newInstance();
 		}
