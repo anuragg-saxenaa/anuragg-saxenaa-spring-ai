@@ -19,37 +19,35 @@ package org.springframework.ai.mcp.client.webflux.transport;
 import java.lang.reflect.Method;
 
 import io.modelcontextprotocol.json.McpJsonDefaults;
-import io.modelcontextprotocol.spec.McpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema;
-import io.modelcontextprotocol.spec.McpTransportException;
 import org.junit.jupiter.api.Test;
 import reactor.util.function.Tuple2;
 
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests for {@link WebClientStreamableHttpTransport} SSE parsing behavior.
  */
 class WebClientStreamableHttpTransportSseParsingTest {
 
+	@SuppressWarnings("unused")
 	private final McpJsonMapper jsonMapper = McpJsonDefaults.getMapper();
 
 	/**
-	 * Regression test for issue #5780: SSE frames without explicit event: field should
-	 * be accepted. Per SSE spec, omitting event: defaults to "message", but Spring AI only
+	 * Regression test for issue #5780: SSE frames without explicit event: field should be
+	 * accepted. Per SSE spec, omitting event: defaults to "message", but Spring AI only
 	 * parsed frames where event.event() == "message" exactly.
 	 */
 	@Test
 	void parseSseFrameWithoutEventFieldShouldBeAccepted() throws Exception {
-		WebClientStreamableHttpTransport transport = WebClientStreamableHttpTransport
-			.builder(reactor.core.client.ClientHttpConnector::create)
+		WebClientStreamableHttpTransport transport = WebClientStreamableHttpTransport.builder(WebClient.builder())
 			.build();
 
-		Method parseMethod = WebClientStreamableHttpTransport.class.getDeclaredMethod("parse",
-				ServerSentEvent.class);
+		Method parseMethod = WebClientStreamableHttpTransport.class.getDeclaredMethod("parse", ServerSentEvent.class);
 		parseMethod.setAccessible(true);
 
 		// Create SSE frame WITHOUT event: field (event type is null)
@@ -59,7 +57,8 @@ class WebClientStreamableHttpTransportSseParsingTest {
 			.data("{\"jsonrpc\":\"2.0\",\"id\":\"1\",\"result\":{}}")
 			.build();
 
-		Tuple2<java.util.Optional<String>, Iterable<McpSchema.JSONRPCMessage>> result = (Tuple2<?, ?>) parseMethod.invoke(transport, eventWithoutType);
+		var result = (Tuple2<java.util.Optional<String>, Iterable<McpSchema.JSONRPCMessage>>) parseMethod
+			.invoke(transport, eventWithoutType);
 
 		assertThat(result.getT1()).hasValue("test-id-1");
 		assertThat(result.getT2()).hasSize(1);
@@ -70,12 +69,10 @@ class WebClientStreamableHttpTransportSseParsingTest {
 
 	@Test
 	void parseSseFrameWithEmptyEventTypeShouldBeAccepted() throws Exception {
-		WebClientStreamableHttpTransport transport = WebClientStreamableHttpTransport
-			.builder(reactor.core.client.ClientHttpConnector::create)
+		WebClientStreamableHttpTransport transport = WebClientStreamableHttpTransport.builder(WebClient.builder())
 			.build();
 
-		Method parseMethod = WebClientStreamableHttpTransport.class.getDeclaredMethod("parse",
-				ServerSentEvent.class);
+		Method parseMethod = WebClientStreamableHttpTransport.class.getDeclaredMethod("parse", ServerSentEvent.class);
 		parseMethod.setAccessible(true);
 
 		// Create SSE frame with empty event type
@@ -86,7 +83,8 @@ class WebClientStreamableHttpTransportSseParsingTest {
 			.data("{\"jsonrpc\":\"2.0\",\"id\":\"2\",\"result\":{\"success\":true}}")
 			.build();
 
-		Tuple2<java.util.Optional<String>, Iterable<McpSchema.JSONRPCMessage>> result = (Tuple2<?, ?>) parseMethod.invoke(transport, eventWithEmptyType);
+		var result = (Tuple2<java.util.Optional<String>, Iterable<McpSchema.JSONRPCMessage>>) parseMethod
+			.invoke(transport, eventWithEmptyType);
 
 		assertThat(result.getT1()).hasValue("test-id-2");
 		assertThat(result.getT2()).hasSize(1);
@@ -97,12 +95,10 @@ class WebClientStreamableHttpTransportSseParsingTest {
 
 	@Test
 	void parseSseFrameWithMessageEventTypeShouldBeAccepted() throws Exception {
-		WebClientStreamableHttpTransport transport = WebClientStreamableHttpTransport
-			.builder(reactor.core.client.ClientHttpConnector::create)
+		WebClientStreamableHttpTransport transport = WebClientStreamableHttpTransport.builder(WebClient.builder())
 			.build();
 
-		Method parseMethod = WebClientStreamableHttpTransport.class.getDeclaredMethod("parse",
-				ServerSentEvent.class);
+		Method parseMethod = WebClientStreamableHttpTransport.class.getDeclaredMethod("parse", ServerSentEvent.class);
 		parseMethod.setAccessible(true);
 
 		// Create SSE frame with explicit "message" event type
@@ -113,7 +109,8 @@ class WebClientStreamableHttpTransportSseParsingTest {
 			.data("{\"jsonrpc\":\"2.0\",\"id\":\"3\",\"result\":{\"value\":42}}")
 			.build();
 
-		Tuple2<java.util.Optional<String>, Iterable<McpSchema.JSONRPCMessage>> result = (Tuple2<?, ?>) parseMethod.invoke(transport, eventWithMessageType);
+		var result = (Tuple2<java.util.Optional<String>, Iterable<McpSchema.JSONRPCMessage>>) parseMethod
+			.invoke(transport, eventWithMessageType);
 
 		assertThat(result.getT1()).hasValue("test-id-3");
 		assertThat(result.getT2()).hasSize(1);
@@ -124,12 +121,10 @@ class WebClientStreamableHttpTransportSseParsingTest {
 
 	@Test
 	void parseSseFrameWithUnknownEventTypeShouldBeIgnored() throws Exception {
-		WebClientStreamableHttpTransport transport = WebClientStreamableHttpTransport
-			.builder(reactor.core.client.ClientHttpConnector::create)
+		WebClientStreamableHttpTransport transport = WebClientStreamableHttpTransport.builder(WebClient.builder())
 			.build();
 
-		Method parseMethod = WebClientStreamableHttpTransport.class.getDeclaredMethod("parse",
-				ServerSentEvent.class);
+		Method parseMethod = WebClientStreamableHttpTransport.class.getDeclaredMethod("parse", ServerSentEvent.class);
 		parseMethod.setAccessible(true);
 
 		// Create SSE frame with unknown event type - should be ignored
@@ -140,7 +135,8 @@ class WebClientStreamableHttpTransportSseParsingTest {
 			.data("{\"jsonrpc\":\"2.0\",\"id\":\"4\",\"result\":{}}")
 			.build();
 
-		Tuple2<java.util.Optional<String>, Iterable<McpSchema.JSONRPCMessage>> result = (Tuple2<?, ?>) parseMethod.invoke(transport, eventWithUnknownType);
+		var result = (Tuple2<java.util.Optional<String>, Iterable<McpSchema.JSONRPCMessage>>) parseMethod
+			.invoke(transport, eventWithUnknownType);
 
 		assertThat(result.getT1()).isEmpty();
 		assertThat(result.getT2()).isEmpty();
@@ -148,12 +144,10 @@ class WebClientStreamableHttpTransportSseParsingTest {
 
 	@Test
 	void parseSseNotificationFrameWithoutEventField() throws Exception {
-		WebClientStreamableHttpTransport transport = WebClientStreamableHttpTransport
-			.builder(reactor.core.client.ClientHttpConnector::create)
+		WebClientStreamableHttpTransport transport = WebClientStreamableHttpTransport.builder(WebClient.builder())
 			.build();
 
-		Method parseMethod = WebClientStreamableHttpTransport.class.getDeclaredMethod("parse",
-				ServerSentEvent.class);
+		Method parseMethod = WebClientStreamableHttpTransport.class.getDeclaredMethod("parse", ServerSentEvent.class);
 		parseMethod.setAccessible(true);
 
 		// Create SSE notification frame WITHOUT event: field
@@ -162,7 +156,8 @@ class WebClientStreamableHttpTransportSseParsingTest {
 			.data("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/status\",\"params\":{\"status\":\"ok\"}}")
 			.build();
 
-		Tuple2<java.util.Optional<String>, Iterable<McpSchema.JSONRPCMessage>> result = (Tuple2<?, ?>) parseMethod.invoke(transport, notificationEvent);
+		var result = (Tuple2<java.util.Optional<String>, Iterable<McpSchema.JSONRPCMessage>>) parseMethod
+			.invoke(transport, notificationEvent);
 
 		assertThat(result.getT1()).isEmpty();
 		assertThat(result.getT2()).hasSize(1);

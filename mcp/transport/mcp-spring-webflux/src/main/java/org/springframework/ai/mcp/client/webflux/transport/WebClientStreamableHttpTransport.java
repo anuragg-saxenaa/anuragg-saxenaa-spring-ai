@@ -260,6 +260,20 @@ public final class WebClientStreamableHttpTransport implements McpClientTranspor
 						logger.debug("The server does not support SSE streams, using request-response mode.");
 						return Flux.empty();
 					}
+					else if (isOkWithoutSse(response)) {
+						// Per the MCP streamable-http spec (2025-03-26 and later), the
+						// server MAY answer the GET /mcp probe with any 2xx response
+						// whose Content-Type is not text/event-stream, signalling
+						// "this endpoint is request-response only" (e.g. a 200 OK with
+						// a JSON status body). The mcp-core 1.1.0 client incorrectly
+						// feeds such a response through its SSE line parser and fails
+						// with "Invalid SSE response. Status code: 200" (issue #5239).
+						// Tolerate it here: drain the body for diagnostics, then
+						// complete the stream empty so the client continues in
+						// request-response mode. See
+						// https://github.com/spring-projects/spring-ai/issues/5239
+						return drainJsonBodyForDiagnostics(response, "GET /mcp probe (no SSE)");
+					}
 					else if (isNotFound(response)) {
 						if (transportSession.sessionId().isPresent()) {
 							String sessionIdRepresentation = sessionIdOrPlaceholder(transportSession);
@@ -463,6 +477,64 @@ public final class WebClientStreamableHttpTransport implements McpClientTranspor
 				&& response.headers().contentType().get().isCompatibleWith(MediaType.TEXT_EVENT_STREAM);
 	}
 
+	/**
+	 * A 2xx response that is not an SSE stream indicates the server is signalling "no
+	 * live stream on GET". This is a valid response per the MCP streamable-http spec: the
+	 * server may answer 200 with a JSON body, no content-type, or any
+	 * non-{@code text/event-stream} content type. We must NOT treat this as an error
+	 * (which is what the generic "else" branch would do via {@code createError()}).
+	 * <p>
+	 * See <a href="https://github.com/spring-projects/spring-ai/issues/5239">issue
+	 * #5239</a>.
+	 */
+	private static boolean isOkWithoutSse(ClientResponse response) {
+		if (!response.statusCode().is2xxSuccessful()) {
+			return false;
+		}
+		// If there is no content type at all, the server told us nothing about SSE —
+		// the safest interpretation is "no live stream". Accept.
+		Optional<MediaType> contentTypeOpt = response.headers().contentType();
+		if (contentTypeOpt.isEmpty()) {
+			return true;
+		}
+		// Otherwise, the only content type we cannot tolerate here is
+		// text/event-stream (handled by isEventStream). Any other content type
+		// (application/json, text/plain, …) means the server is not opening a
+		// stream; treat as a valid no-stream probe response.
+		return !contentTypeOpt.get().isCompatibleWith(MediaType.TEXT_EVENT_STREAM);
+	}
+
+	/**
+	 * Drain the response body to a String and log it at DEBUG, then complete empty. Used
+	 * when the GET /mcp probe receives a non-SSE 2xx response (e.g. a 200 with an
+	 * {@code application/json} status body) — per the MCP spec that is a valid "no live
+	 * stream" signal, and we want to log the body for diagnostics without forwarding it
+	 * through the SSE parser.
+	 */
+	private Flux<McpSchema.JSONRPCMessage> drainJsonBodyForDiagnostics(ClientResponse response, String context) {
+		Mono<McpSchema.JSONRPCMessage> mono = response.bodyToMono(String.class)
+			.defaultIfEmpty("").<McpSchema.JSONRPCMessage>handle((body, sink) -> {
+				// Log at DEBUG so operators can confirm the server actually
+				// returned a non-SSE body; truncate very large bodies to avoid
+				// log spam.
+				String trimmed = body == null ? "" : body;
+				if (trimmed.length() > 1024) {
+					trimmed = trimmed.substring(0, 1024) + "... [truncated " + (body.length() - 1024) + " chars]";
+				}
+				logger.debug("{} returned non-SSE response (Content-Type={}, status={}). Body for diagnostics: {}",
+						context, response.headers().contentType().orElse(null), response.statusCode(), trimmed);
+				sink.complete();
+			})
+			.onErrorResume(e -> {
+				// Body read failure is non-fatal for the GET probe; just log and
+				// continue.
+				logger.debug("Could not read body for {} (Content-Type={}, status={}): {}", context,
+						response.headers().contentType().orElse(null), response.statusCode(), e.getMessage());
+				return Mono.empty();
+			});
+		return Flux.from(mono);
+	}
+
 	private static String sessionIdOrPlaceholder(McpTransportSession<?> transportSession) {
 		return transportSession.sessionId().orElse(MISSING_SESSION_ID);
 	}
@@ -503,7 +575,8 @@ public final class WebClientStreamableHttpTransport implements McpClientTranspor
 
 	private Tuple2<Optional<String>, Iterable<McpSchema.JSONRPCMessage>> parse(ServerSentEvent<String> event) {
 		String eventType = event.event();
-		// Per SSE spec, omitting event: defaults to "message". Accept null/empty/"message" as valid.
+		// Per SSE spec, omitting event: defaults to "message". Accept
+		// null/empty/"message" as valid.
 		if (MESSAGE_EVENT_TYPE.equals(eventType) || eventType == null || eventType.isEmpty()) {
 			try {
 				// We don't support batching ATM and probably won't since the next version
